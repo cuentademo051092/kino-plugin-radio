@@ -1,10 +1,10 @@
 {
   "id": "radio-latam",
   "name": "Radio en vivo",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "apiVersion": 3,
   "entry": "plugin.js",
-  "description": "Radios en vivo de Bolivia (con las de Santa Cruz), Latinoamérica, Estados Unidos y España, y una categoría de anime.",
+  "description": "Radios en vivo: Radio Disney de cada país, Bolivia (con las de Santa Cruz), Latinoamérica, Estados Unidos y España, y una categoría de anime.",
   "hosts": [
     "de1.api.radio-browser.info",
     "nl1.api.radio-browser.info",

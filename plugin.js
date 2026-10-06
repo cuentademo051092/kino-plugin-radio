@@ -1,4 +1,4 @@
-// Radio en vivo (v0.5.0): categorías de radio por zona, país y tema.
+// Radio en vivo (v0.6.0): categorías de radio por zona, país y tema.
 // Fuentes: directorio público Radio Browser (radio-browser.info) y, para las radios de
 // Santa Cruz de la Sierra (Bolivia), Radio Garden (radio.garden, interfaz no oficial).
 //
@@ -21,8 +21,25 @@ function pais(codigo, titulo) {
   return { id: codigo.toLowerCase(), titulo, country: codigo, consulta: { countrycode: codigo, limit: 50 } };
 }
 
+// Países de la categoría Radio Disney: se busca la emisora de cada uno en el directorio.
+const PAISES_DISNEY = [
+  { codigo: "AR", titulo: "Argentina" },
+  { codigo: "BO", titulo: "Bolivia" },
+  { codigo: "BR", titulo: "Brasil" },
+  { codigo: "CL", titulo: "Chile" },
+  { codigo: "CR", titulo: "Costa Rica" },
+  { codigo: "EC", titulo: "Ecuador" },
+  { codigo: "MX", titulo: "México" },
+  { codigo: "PA", titulo: "Panamá" },
+  { codigo: "PY", titulo: "Paraguay" },
+  { codigo: "PE", titulo: "Perú" },
+  { codigo: "DO", titulo: "República Dominicana" },
+  { codigo: "UY", titulo: "Uruguay" },
+];
+
 // Categorías en el orden en que aparecen en Kino.
 const CATEGORIAS = [
+  { id: "disney", titulo: "Radio Disney", disney: PAISES_DISNEY },
   {
     id: "bo",
     titulo: "Bolivia",
@@ -237,13 +254,52 @@ function claveSimilar(titulo) {
     .trim();
 }
 
+// Ejecuta las tareas de a pocas a la vez (Kino permite 6 peticiones en vuelo).
+async function enLotes(tareas, tamano) {
+  const salida = [];
+  for (let i = 0; i < tareas.length; i += tamano) {
+    const resultados = await Promise.all(tareas.slice(i, i + tamano).map((t) => t()));
+    for (const r of resultados) salida.push(r);
+  }
+  return salida;
+}
+
+// Una emisora de Radio Disney por país: la más escuchada del directorio que lleve "Disney" en el nombre.
+async function canalesDisney(categoria) {
+  const tareas = categoria.disney.map((pais) => async () => {
+    try {
+      const emisoras = await pedirEmisoras({ countrycode: pais.codigo, name: "Radio Disney", limit: 10 });
+      return emisoras.find((e) => /disney/.test(plano(e && e.name)) && direccionDe(e)) || null;
+    } catch (e) {
+      kino.log("Radio Disney " + pais.titulo + " falló: " + e);
+      return null;
+    }
+  });
+  const encontradas = await enLotes(tareas, 6);
+  const canales = [];
+  categoria.disney.forEach((pais, i) => {
+    const e = encontradas[i];
+    if (!e) {
+      kino.log("No encontré Radio Disney en " + pais.titulo);
+      return;
+    }
+    const canal = crearCanal(e, categoria, "Radio Disney " + pais.titulo, categoria.id);
+    if (canal) canales.push(canal);
+  });
+  canales.sort(compararNombres);
+  return canales;
+}
+
 async function cargarCategoria(categoria) {
   await null;
   const guardado = memoria[categoria.id];
   if (guardado && Date.now() - guardado.hora < DIEZ_MINUTOS) return guardado.canales;
 
   let canales;
-  if (categoria.radioGarden) {
+  if (categoria.disney) {
+    canales = await canalesDisney(categoria);
+    if (!canales.length) throw kino.error("unavailable", "no encontré emisoras de Radio Disney");
+  } else if (categoria.radioGarden) {
     // Las dos fuentes van a la vez y si una falla, la otra sigue sirviendo.
     const [delDirectorio, deRadioGarden] = await Promise.all([
       pedirEmisoras(categoria.consulta).catch((e) => {
